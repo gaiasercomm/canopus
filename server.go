@@ -7,6 +7,7 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -40,6 +41,8 @@ func createServer() CoapServer {
 }
 
 type DefaultCoapServer struct {
+	sync.RWMutex
+
 	messageIds            map[uint16]time.Time
 	incomingBlockMessages map[string]Message
 	outgoingBlockMessages map[string]Message
@@ -365,6 +368,8 @@ func (s *DefaultCoapServer) handleIncomingDTLSData(conn ServerConnection, ctx *S
 			if err == nil {
 				msgBuf := make([]byte, len)
 				copy(msgBuf, readBuf[:len])
+
+				s.Lock()
 				ssn := s.sessions[addr.String()]
 				if ssn == nil {
 					ssn = &DTLSServerSession{
@@ -378,11 +383,13 @@ func (s *DefaultCoapServer) handleIncomingDTLSData(conn ServerConnection, ctx *S
 					}
 					err := newSslSession(ssn.(*DTLSServerSession), ctx, s.fnPskHandler)
 					if err != nil {
+						s.Unlock()
 						panic(err.Error())
 					}
 					s.sessions[addr.String()] = ssn
 					s.createdSession <- ssn
 				}
+				s.Unlock()
 
 				ssn.(*DTLSServerSession).rcvd <- msgBuf
 			} else {
@@ -416,6 +423,8 @@ func (s *DefaultCoapServer) handleIncomingData(conn ServerConnection) {
 			if err == nil {
 				msgBuf := make([]byte, len)
 				copy(msgBuf, readBuf[:len])
+
+				s.Lock()
 				ssn := s.sessions[addr.String()]
 				if ssn == nil {
 					ssn = &UDPServerSession{
@@ -425,10 +434,13 @@ func (s *DefaultCoapServer) handleIncomingData(conn ServerConnection) {
 						rcvd:   make(chan []byte),
 					}
 					if err != nil {
+						s.Unlock()
 						panic(err.Error())
 					}
 					s.sessions[addr.String()] = ssn
 				}
+				s.Unlock()
+
 				go func() {
 					ssn.(*UDPServerSession).rcvd <- msgBuf
 				}()
@@ -442,6 +454,9 @@ func (s *DefaultCoapServer) handleIncomingData(conn ServerConnection) {
 }
 
 func (s *DefaultCoapServer) GetSession(addr string) Session {
+	s.RLock()
+	defer s.RUnlock()
+
 	return s.sessions[addr]
 }
 
@@ -450,6 +465,9 @@ func (s *DefaultCoapServer) Stop() {
 }
 
 func (s *DefaultCoapServer) updateBlockMessageFragment(client string, msg Message, seq uint32) {
+	s.Lock()
+	defer s.Unlock()
+
 	msgs := s.incomingBlockMessages[client]
 
 	if msgs == nil {
@@ -467,6 +485,9 @@ func (s *DefaultCoapServer) updateBlockMessageFragment(client string, msg Messag
 }
 
 func (s *DefaultCoapServer) flushBlockMessagePayload(origin string) MessagePayload {
+	s.RLock()
+	defer s.RUnlock()
+
 	msgs := s.incomingBlockMessages[origin]
 
 	blockMsg := msgs.(*CoapBlockMessage)
@@ -482,12 +503,14 @@ func (s *DefaultCoapServer) handleMessageIDPurge() {
 		for {
 			select {
 			case <-ticker.C:
+				s.Lock()
 				for k, v := range s.messageIds {
 					elapsed := time.Since(v)
 					if elapsed > MessageIDPurgeDuration {
 						delete(s.messageIds, k)
 					}
 				}
+				s.Unlock()
 			}
 		}
 	}()
@@ -519,6 +542,9 @@ func (s *DefaultCoapServer) handleSession(session Session) {
 }
 
 func (s *DefaultCoapServer) closeSession(ssn Session) {
+	s.Lock()
+	defer s.Unlock()
+
 	delete(s.sessions, ssn.GetAddress().String())
 }
 
@@ -561,12 +587,18 @@ func (s *DefaultCoapServer) NewRoute(path string, method CoapCode, fn RouteHandl
 }
 
 func (s *DefaultCoapServer) storeNewOutgoingBlockMessage(client string, payload []byte) {
+	s.Lock()
+	defer s.Unlock()
+
 	bm := NewBlockMessage().(*CoapBlockMessage)
 	bm.MessageBuf = payload
 	s.outgoingBlockMessages[client] = bm
 }
 
 func (s *DefaultCoapServer) NotifyChange(resource, value string, confirm bool) {
+	s.RLock()
+	defer s.RUnlock()
+
 	t := s.observations[resource]
 
 	if t != nil {
@@ -591,10 +623,16 @@ func (s *DefaultCoapServer) NotifyChange(resource, value string, confirm bool) {
 }
 
 func (s *DefaultCoapServer) AddObservation(resource, token string, session Session) {
+	s.Lock()
+	defer s.Unlock()
+
 	s.observations[resource] = append(s.observations[resource], NewObservation(session, token, resource))
 }
 
 func (s *DefaultCoapServer) HasObservation(resource string, addr net.Addr) bool {
+	s.RLock()
+	defer s.RUnlock()
+
 	obs := s.observations[resource]
 	if obs == nil {
 		return false
@@ -609,6 +647,9 @@ func (s *DefaultCoapServer) HasObservation(resource string, addr net.Addr) bool 
 }
 
 func (s *DefaultCoapServer) RemoveObservation(resource string, addr net.Addr) {
+	s.Lock()
+	defer s.Unlock()
+
 	obs := s.observations[resource]
 	if obs == nil {
 		return
@@ -691,12 +732,18 @@ func (s *DefaultCoapServer) GetRoutes() []Route {
 }
 
 func (s *DefaultCoapServer) isDuplicateMessage(msg Message) bool {
+	s.RLock()
+	defer s.RUnlock()
+
 	_, ok := s.messageIds[msg.GetMessageId()]
 
 	return ok
 }
 
 func (s *DefaultCoapServer) updateMessageTS(msg Message) {
+	s.Lock()
+	defer s.Unlock()
+
 	s.messageIds[msg.GetMessageId()] = time.Now()
 }
 
@@ -784,6 +831,9 @@ func (s *DefaultCoapServer) handleAcknowledgeObserveRequest(msg Message) {
 }
 
 func (s *DefaultCoapServer) handleAcknowledgeObserveRequestGetSession(addr string) Session {
+	s.RLock()
+	defer s.RUnlock()
+
 	return s.sessions[addr]
 }
 
@@ -795,16 +845,28 @@ func NewResponseChannel() (ch chan *CoapResponseChannel) {
 
 func AddResponseChannel(c CoapServer, msgId uint16, ch chan *CoapResponseChannel) {
 	s := c.(*DefaultCoapServer)
+
+	s.Lock()
+	defer s.Unlock()
+
 	s.coapResponseChannelsMap[msgId] = ch
 }
 
 func DeleteResponseChannel(c CoapServer, msgId uint16) {
 	s := c.(*DefaultCoapServer)
+
+	s.Lock()
+	defer s.Unlock()
+
 	delete(s.coapResponseChannelsMap, msgId)
 }
 
 func GetResponseChannel(c CoapServer, msgId uint16) (ch chan *CoapResponseChannel) {
 	s := c.(*DefaultCoapServer)
+
+	s.RLock()
+	defer s.RUnlock()
+
 	ch = s.coapResponseChannelsMap[msgId]
 
 	return
