@@ -115,9 +115,21 @@ func (s *DefaultCoapServer) handleRequest(msg Message, session Session) {
 				PrintMessage(msg)
 				if msg.GetMessageType() == MessageConfirmable {
 					log.Println("Duplicate Message ID ", msg.GetMessageId())
-					s.handleReqDuplicateMessageID(msg, session)
+
+					/*
+						Section 4.5 Message Deduplication of RFC7252 describes how a recipient handle duplicate
+						message as below,
+
+						"The recipient SHOULD acknowledge each duplicate copy of a Confirmable message using the
+						same Acknowledgement or Reset message but SHOULD process any request or response in the
+						message	only once."
+
+						Here we choice to pass requests to upper layer to handle the duplicate message.
+					 */
+					//s.handleReqDuplicateMessageID(msg, session)
+				} else {
+					return
 				}
-				return
 			}
 
 			s.updateMessageTS(msg)
