@@ -915,10 +915,9 @@ func _doSendMessage(msg Message, session Session, ch chan *CoapResponseChannel) 
 		ch <- resp
 	}
 
-	// TODO: do not put channel into coapResponseChannelsMap if message type is MessageAcknowledgment,
-	//       which will reduce memory usage dramatically.
-	//       Need to study RFC to figure out a solution.
-	if msg.GetMessageType() == MessageNonConfirmable || msg.GetMessageType() == MessageAcknowledgment {
+	// Do not put channel into coapResponseChannelsMap if message type is not MessageConfirmable,
+	// which will reduce memory usage dramatically.
+	if msg.GetMessageType() != MessageConfirmable {
 		resp.Response = NewResponse(NewEmptyMessage(msg.GetMessageId()), nil)
 		ch <- resp
 	}
