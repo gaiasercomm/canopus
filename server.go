@@ -60,6 +60,7 @@ type DefaultCoapServer struct {
 	coapResponseChannelsMap map[uint16]chan *CoapResponseChannel
 
 	sessions       map[string]Session
+	sessionTimer map[string]*time.Timer
 	createdSession chan Session
 	serverConfig   *ServerConfiguration
 
@@ -69,7 +70,15 @@ type DefaultCoapServer struct {
 }
 
 func (s *DefaultCoapServer) DeleteSession(ssn Session) {
-	s.closeSession(ssn)
+	if timer, exist := s.sessionTimer[ssn.GetAddress().String()]; exist {
+		log.Println("reset session keep alive for 3 minutes")
+		timer.Reset(3 * time.Minute)
+	} else {
+		s.sessionTimer[ssn.GetAddress().String()] = time.NewTimer(3 * time.Minute)
+		<- s.sessionTimer[ssn.GetAddress().String()].C
+		log.Println("session close")
+		s.closeSession(ssn)
+	}
 }
 
 func (s *DefaultCoapServer) HandlePSK(fn func(id string) []byte) {
