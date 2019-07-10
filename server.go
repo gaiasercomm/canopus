@@ -72,6 +72,11 @@ type DefaultCoapServer struct {
 }
 
 func (s *DefaultCoapServer) DeleteSession(ssn Session) {
+	if s.SessionKeepAlive <= 0 {
+		s.closeSession(ssn)
+		return
+	}
+
 	if timer, exist := s.sessionTimer[ssn.GetAddress().String()]; exist {
 		log.Println("reset session keep alive for 3 minutes")
 		timer.Reset(time.Duration(s.SessionKeepAlive) * time.Second)
