@@ -19,11 +19,11 @@ type ServerConfiguration struct {
 	EnableResourceDiscovery bool
 }
 
-func NewServer() CoapServer {
-	return createServer()
+func NewServer(sessionKeepAlive int) CoapServer {
+	return createServer(sessionKeepAlive)
 }
 
-func createServer() CoapServer {
+func createServer(sessionKeepAlive int) CoapServer {
 	return &DefaultCoapServer{
 		events:                  NewEvents(),
 		observations:            make(map[string][]*Observation),
@@ -37,6 +37,7 @@ func createServer() CoapServer {
 		outgoingBlockMessages:   make(map[string]Message),
 		sessions:                make(map[string]Session),
 		createdSession:          make(chan Session),
+		SessionKeepAlive:        sessionKeepAlive,
 	}
 }
 
@@ -60,22 +61,23 @@ type DefaultCoapServer struct {
 	coapResponseChannelsMap map[uint16]chan *CoapResponseChannel
 
 	sessions       map[string]Session
-	sessionTimer map[string]*time.Timer
+	sessionTimer   map[string]*time.Timer
 	createdSession chan Session
 	serverConfig   *ServerConfiguration
 
 	cookieSecret []byte
 
-	fnPskHandler func(id string) []byte
+	fnPskHandler     func(id string) []byte
+	SessionKeepAlive int
 }
 
 func (s *DefaultCoapServer) DeleteSession(ssn Session) {
 	if timer, exist := s.sessionTimer[ssn.GetAddress().String()]; exist {
 		log.Println("reset session keep alive for 3 minutes")
-		timer.Reset(3 * time.Minute)
+		timer.Reset(time.Duration(s.SessionKeepAlive) * time.Second)
 	} else {
-		s.sessionTimer[ssn.GetAddress().String()] = time.NewTimer(3 * time.Minute)
-		<- s.sessionTimer[ssn.GetAddress().String()].C
+		s.sessionTimer[ssn.GetAddress().String()] = time.NewTimer(time.Duration(s.SessionKeepAlive) * time.Second)
+		<-s.sessionTimer[ssn.GetAddress().String()].C
 		log.Println("session close")
 		s.closeSession(ssn)
 	}
