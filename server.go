@@ -37,6 +37,7 @@ func createServer(sessionKeepAlive int) CoapServer {
 		outgoingBlockMessages:   make(map[string]Message),
 		sessions:                make(map[string]Session),
 		createdSession:          make(chan Session),
+		SessionTimer:            make(map[string]*time.Timer),
 		SessionKeepAlive:        sessionKeepAlive,
 	}
 }
@@ -61,7 +62,7 @@ type DefaultCoapServer struct {
 	coapResponseChannelsMap map[uint16]chan *CoapResponseChannel
 
 	sessions       map[string]Session
-	sessionTimer   map[string]*time.Timer
+	SessionTimer   map[string]*time.Timer
 	createdSession chan Session
 	serverConfig   *ServerConfiguration
 
@@ -77,12 +78,12 @@ func (s *DefaultCoapServer) DeleteSession(ssn Session) {
 		return
 	}
 
-	if timer, exist := s.sessionTimer[ssn.GetAddress().String()]; exist {
+	if timer, exist := s.SessionTimer[ssn.GetAddress().String()]; exist {
 		log.Printf("reset session keep alive for %v seconds\n", s.SessionKeepAlive)
 		timer.Reset(time.Duration(s.SessionKeepAlive) * time.Second)
 	} else {
-		s.sessionTimer[ssn.GetAddress().String()] = time.NewTimer(time.Duration(s.SessionKeepAlive) * time.Second)
-		<-s.sessionTimer[ssn.GetAddress().String()].C
+		s.SessionTimer[ssn.GetAddress().String()] = time.NewTimer(time.Duration(s.SessionKeepAlive) * time.Second)
+		<-s.SessionTimer[ssn.GetAddress().String()].C
 		log.Println("session close")
 		s.closeSession(ssn)
 	}
