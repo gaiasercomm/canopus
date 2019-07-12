@@ -420,10 +420,10 @@ func (s *DefaultCoapServer) handleIncomingDTLSData(conn ServerConnection, ctx *S
 						panic(err.Error())
 					}
 					s.sessions[addr.String()] = ssn
+					s.createdSession <- ssn
 				} else {
 					log.Println(fmt.Sprint("session already exist: %v", addr.String()))
 				}
-				s.createdSession <- ssn
 				s.Unlock()
 				ssn.(*DTLSServerSession).rcvd <- msgBuf
 			} else {
