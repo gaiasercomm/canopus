@@ -420,7 +420,9 @@ func (s *DefaultCoapServer) handleIncomingDTLSData(conn ServerConnection, ctx *S
 				}
 				s.Unlock()
 
-				ssn.(*DTLSServerSession).rcvd <- msgBuf
+				go func(){
+					ssn.(*DTLSServerSession).rcvd <- msgBuf
+				}()
 				log.Println("start handle ssn")
 				go s.handleSession(ssn)
 			} else {
@@ -428,7 +430,7 @@ func (s *DefaultCoapServer) handleIncomingDTLSData(conn ServerConnection, ctx *S
 			}
 		}
 	}()
-	
+
 	//go func() {
 	//	for {
 	//		ssn := <-s.createdSession
