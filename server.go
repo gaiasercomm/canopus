@@ -421,18 +421,20 @@ func (s *DefaultCoapServer) handleIncomingDTLSData(conn ServerConnection, ctx *S
 				s.Unlock()
 
 				ssn.(*DTLSServerSession).rcvd <- msgBuf
+				log.Println("start handle ssn")
+				go s.handleSession(ssn)
 			} else {
 				logMsg("Error occured reading UDP", err)
 			}
 		}
 	}()
-
-	go func() {
-		for {
-			ssn := <-s.createdSession
-			go s.handleSession(ssn)
-		}
-	}()
+	
+	//go func() {
+	//	for {
+	//		ssn := <-s.createdSession
+	//		go s.handleSession(ssn)
+	//	}
+	//}()
 
 }
 
