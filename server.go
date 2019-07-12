@@ -382,6 +382,7 @@ func (s *DefaultCoapServer) createConn(addr string) ServerConnection {
 }
 
 func (s *DefaultCoapServer) handleIncomingDTLSData(conn ServerConnection, ctx *ServerDtlsContext) {
+	log.Println("start handling incoming dtls data")
 	readBuf := make([]byte, MaxPacketSize)
 	go func() {
 		for {
@@ -392,15 +393,17 @@ func (s *DefaultCoapServer) handleIncomingDTLSData(conn ServerConnection, ctx *S
 			default:
 				// continue
 			}
-
+			log.Println("read from buffer")
 			len, addr, err := conn.ReadFrom(readBuf)
 			if err == nil {
+				log.Println("copy from buffer")
 				msgBuf := make([]byte, len)
 				copy(msgBuf, readBuf[:len])
 
 				s.Lock()
 				ssn := s.sessions[addr.String()]
 				if ssn == nil {
+					log.Println("create session")
 					ssn = &DTLSServerSession{
 						UDPServerSession: UDPServerSession{
 							addr:   addr,
@@ -419,25 +422,20 @@ func (s *DefaultCoapServer) handleIncomingDTLSData(conn ServerConnection, ctx *S
 					s.createdSession <- ssn
 				}
 				s.Unlock()
-
-				go func(){
-					ssn.(*DTLSServerSession).rcvd <- msgBuf
-				}()
-				log.Println("start handle ssn")
-				go s.handleSession(ssn)
+				ssn.(*DTLSServerSession).rcvd <- msgBuf
 			} else {
 				logMsg("Error occured reading UDP", err)
 			}
 		}
 	}()
 
-	//go func() {
-	//	for {
-	//		ssn := <-s.createdSession
-	//		go s.handleSession(ssn)
-	//	}
-	//}()
-
+	go func() {
+		for {
+			ssn := <-s.createdSession
+			log.Println("start handle session")
+			go s.handleSession(ssn)
+		}
+	}()
 }
 
 func (s *DefaultCoapServer) handleIncomingData(conn ServerConnection) {
