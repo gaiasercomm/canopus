@@ -401,7 +401,7 @@ func (s *DefaultCoapServer) handleIncomingDTLSData(conn ServerConnection, ctx *S
 				msgBuf := make([]byte, len)
 				copy(msgBuf, readBuf[:len])
 
-				s.Lock()
+				//s.Lock()
 				ssn := s.sessions[addr.String()]
 				if ssn == nil {
 					log.Println("create session")
@@ -416,7 +416,7 @@ func (s *DefaultCoapServer) handleIncomingDTLSData(conn ServerConnection, ctx *S
 					}
 					err := newSslSession(ssn.(*DTLSServerSession), ctx, s.fnPskHandler)
 					if err != nil {
-						s.Unlock()
+						//s.Unlock()
 						panic(err.Error())
 					}
 					s.sessions[addr.String()] = ssn
@@ -425,7 +425,7 @@ func (s *DefaultCoapServer) handleIncomingDTLSData(conn ServerConnection, ctx *S
 					log.Println(fmt.Sprint("session already exist: %v", addr.String()))
 					s.closeSession(ssn)
 				}
-				s.Unlock()
+				//s.Unlock()
 				ssn.(*DTLSServerSession).rcvd <- msgBuf
 			} else {
 				logMsg("Error occured reading UDP", err)
@@ -577,8 +577,8 @@ func (s *DefaultCoapServer) handleSession(session Session) {
 }
 
 func (s *DefaultCoapServer) closeSession(ssn Session) {
-	s.Lock()
-	defer s.Unlock()
+	//s.Lock()
+	//defer s.Unlock()
 
 	delete(s.sessions, ssn.GetAddress().String())
 }
